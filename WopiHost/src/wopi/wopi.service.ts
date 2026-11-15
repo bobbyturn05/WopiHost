@@ -21,7 +21,7 @@ export class WopiService {
       OwnerId: this.toWopiIdentity(metadata.ownerId || `${access.bucket}/${access.key}`),
       Size: metadata.size,
       Version: this.getVersion(metadata),
-      UserId: this.toWopiIdentity(access.userId),
+      UserId: access.userId,
       ...(metadata.lastModified ? { LastModifiedTime: metadata.lastModified.toISOString() } : {}),
       UserCanWrite: access.mode === 'edit',
       ReadOnly: access.mode !== 'edit',

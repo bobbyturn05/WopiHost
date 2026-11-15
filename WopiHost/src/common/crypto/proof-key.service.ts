@@ -117,7 +117,8 @@ export class ProofKeyService {
 
     const timestamp = BigInt(value);
     const now = DOTNET_UNIX_EPOCH_TICKS + BigInt(Date.now()) * TICKS_PER_MILLISECOND;
-    if (timestamp > now || now - timestamp > MAX_CLOCK_SKEW_TICKS || timestamp > 0x7fffffffffffffffn) {
+    const difference = timestamp >= now ? timestamp - now : now - timestamp;
+    if (difference > MAX_CLOCK_SKEW_TICKS || timestamp > 0x7fffffffffffffffn) {
       throw new InternalServerErrorException('WOPI timestamp is outside the allowed window');
     }
 

@@ -9,7 +9,7 @@ A NestJS WOPI host that serves documents stored in MinIO through Microsoft Offic
 - The WOPI host never calls the main application.
 - The WOPI host reads and writes document content directly in MinIO using the AWS SDK for JavaScript v3.
 - The browser receives an Office launch form, not MinIO credentials or MinIO presigned URLs.
-- The WOPI host stores hashed launch/access tokens and document-scoped WOPI locks in MongoDB. CheckFileInfo derives a stable alphanumeric WOPI identity by hashing the supplied `userId`; `OwnerId` is read from the MinIO object's custom `ownerid` metadata when present; if absent, it falls back to a stable identity derived from the bucket and object key. Both values are hashed into stable alphanumeric WOPI identities. `UserFriendlyName` is omitted.
+- The WOPI host stores hashed launch/access tokens and document-scoped WOPI locks in MongoDB. CheckFileInfo returns the supplied `userId` unchanged as `UserId`; it does not receive or expose a separate display name. `OwnerId` is read from the MinIO object's custom `ownerid` metadata when present; if absent, it uses a stable opaque identity derived from the bucket and object key. `UserFriendlyName` is omitted.
 
 The internal endpoint must be protected by the service token **and** restricted at the network/ingress layer so it is not publicly reachable.
 
