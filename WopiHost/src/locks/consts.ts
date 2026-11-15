@@ -1,0 +1,2 @@
+export const WOPI_LOCK_TTL_MS = Symbol('WOPI_LOCK_TTL_MS');
+export const WOPI_OPERATION_LEASE_TTL_MS = Symbol('WOPI_OPERATION_LEASE_TTL_MS');
