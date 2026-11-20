@@ -8,13 +8,13 @@ export class Token {
   @Prop({ required: true, enum: ['launch', 'access'] })
   kind: 'launch' | 'access';
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   tokenHash: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   bucket: string;
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   key: string;
 
   @Prop({ required: true })
@@ -22,27 +22,6 @@ export class Token {
 
   @Prop({ required: true, enum: ['view', 'edit'] })
   mode: 'view' | 'edit';
-
-  @Prop({ required: true })
-  fileId: string;
-
-  @Prop({ required: true })
-  filename: string;
-
-  @Prop({ required: true })
-  contentType: string;
-
-  @Prop({ required: true })
-  size: number;
-
-  @Prop()
-  etag?: string;
-
-  @Prop()
-  lastModified?: Date;
-
-  @Prop()
-  usedAt?: Date;
 
   @Prop({ required: true, index: { expires: 0 } })
   expiresAt: Date;

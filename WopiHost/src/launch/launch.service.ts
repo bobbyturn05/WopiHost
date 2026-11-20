@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { extname } from 'path';
+import { createWopiFileId } from '../common/crypto/file-id.util';
 import { DiscoveryService } from '../discovery/discovery.service';
+import { MinioService } from '../storage/minio.service';
 import { TokensService } from '../tokens/tokens.service';
 
 @Injectable()
@@ -9,38 +11,34 @@ export class LaunchService {
   constructor(
     private readonly tokensService: TokensService,
     private readonly discoveryService: DiscoveryService,
+    private readonly minioService: MinioService,
     private readonly config: ConfigService,
   ) {}
 
   async createOfficeLaunch(launchToken: string) {
-    const pendingLaunch = await this.tokensService.findLaunchToken(launchToken);
-    const extension = extname(pendingLaunch.filename).replace(/^\./, '');
-    const actionUrl = this.discoveryService.getActionUrl(extension, pendingLaunch.mode);
+    const launch = await this.tokensService.consumeLaunchToken(launchToken);
+    const metadata = await this.minioService.statObject(launch.bucket, launch.key);
+    const fileId = createWopiFileId(
+      launch.bucket,
+      launch.key,
+      this.config.getOrThrow<string>('wopi.fileIdSecret'),
+    );
+    const extension = extname(metadata.filename).replace(/^\./, '');
+    const actionUrl = this.discoveryService.getActionUrl(extension, launch.mode);
     const accessTokenExpiresAt = new Date(
       Date.now() + this.config.getOrThrow<number>('tokens.accessTtlSeconds') * 1000,
     );
     const accessToken = await this.tokensService.create({
       kind: 'access',
-      bucket: pendingLaunch.bucket,
-      key: pendingLaunch.key,
-      userId: pendingLaunch.userId,
-      mode: pendingLaunch.mode,
-      fileId: pendingLaunch.fileId,
-      filename: pendingLaunch.filename,
-      contentType: pendingLaunch.contentType,
-      size: pendingLaunch.size,
-      etag: pendingLaunch.etag,
-      lastModified: pendingLaunch.lastModified,
+      bucket: launch.bucket,
+      key: launch.key,
+      userId: launch.userId,
+      mode: launch.mode,
       expiresAt: accessTokenExpiresAt,
     });
-    try {
-      await this.tokensService.consumeLaunchToken(launchToken);
-    } catch (error) {
-      await this.tokensService.revokeAccessToken(accessToken, pendingLaunch.fileId);
-      throw error;
-    }
+
     const publicOrigin = this.config.getOrThrow<string>('app.publicWopiOrigin').replace(/\/+$/, '');
-    const wopiSrc = `${publicOrigin}/wopi/files/${encodeURIComponent(pendingLaunch.fileId)}`;
+    const wopiSrc = `${publicOrigin}/wopi/files/${encodeURIComponent(fileId)}`;
     const formFields = {
       WOPISrc: wopiSrc,
       access_token: accessToken,

@@ -1,6 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, PayloadTooLargeException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'crypto';
 import { MinioService } from '../storage/minio.service';
 import { TokensService } from '../tokens/tokens.service';
 import { PresignRequestDto } from './dto/presign-request.dto';
@@ -15,6 +19,7 @@ export class PresignService {
 
   async create(dto: PresignRequestDto) {
     const allowedBuckets = this.config.getOrThrow<string[]>('minio.allowedBuckets');
+
     if (!allowedBuckets.includes(dto.bucket)) {
       throw new ForbiddenException('The requested bucket is not enabled for WOPI access');
     }
@@ -27,14 +32,11 @@ export class PresignService {
     const maxFileSize = this.config.getOrThrow<number>('wopi.maxFileSizeBytes');
 
     if (metadata.size > maxFileSize) {
-      throw new PayloadTooLargeException(`Document exceeds the configured WOPI file-size limit (${maxFileSize} bytes)`);
+      throw new PayloadTooLargeException(
+        `Document exceeds the configured WOPI file-size limit (${maxFileSize} bytes)`,
+      );
     }
 
-    const fileId = createHmac('sha256', this.config.getOrThrow<string>('wopi.fileIdSecret'))
-      .update(dto.bucket, 'utf8')
-      .update('\0', 'utf8')
-      .update(dto.key, 'utf8')
-      .digest('hex');
     const expiresAt = new Date(
       Date.now() + this.config.getOrThrow<number>('tokens.launchTtlSeconds') * 1000,
     );
@@ -44,12 +46,6 @@ export class PresignService {
       key: dto.key,
       userId: dto.userId,
       mode: dto.mode,
-      fileId,
-      filename: metadata.filename,
-      contentType: metadata.contentType,
-      size: metadata.size,
-      etag: metadata.etag,
-      lastModified: metadata.lastModified,
       expiresAt,
     });
 

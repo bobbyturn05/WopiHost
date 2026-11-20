@@ -1,10 +1,7 @@
-import {
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { generateToken, hashToken } from '../common/crypto/token.util';
 import { Model } from 'mongoose';
+import { generateToken, hashToken } from '../common/crypto/token.util';
 import { Token, TokenDocument } from './schemas/token.schema';
 
 export interface CreateTokenInput {
@@ -13,12 +10,6 @@ export interface CreateTokenInput {
   key: string;
   userId: string;
   mode: 'view' | 'edit';
-  fileId: string;
-  filename: string;
-  contentType: string;
-  size: number;
-  etag?: string;
-  lastModified?: Date;
   expiresAt: Date;
 }
 
@@ -40,14 +31,10 @@ export class TokensService {
     return token;
   }
 
-  async findAccessToken(
-    rawToken: string,
-    fileId: string,
-  ): Promise<TokenDocument> {
+  async findAccessToken(rawToken: string): Promise<TokenDocument> {
     const token = await this.tokenModel.findOne({
       kind: 'access',
       tokenHash: hashToken(rawToken),
-      fileId,
       expiresAt: { $gt: new Date() },
     });
 
@@ -58,12 +45,11 @@ export class TokensService {
     return token;
   }
 
-  async findLaunchToken(rawToken: string): Promise<TokenDocument> {
-    const token = await this.tokenModel.findOne({
+  async consumeLaunchToken(rawToken: string): Promise<TokenDocument> {
+    const token = await this.tokenModel.findOneAndDelete({
       kind: 'launch',
       tokenHash: hashToken(rawToken),
       expiresAt: { $gt: new Date() },
-      usedAt: null,
     });
 
     if (!token) {
@@ -73,35 +59,10 @@ export class TokensService {
     return token;
   }
 
-  async revokeAccessToken(rawToken: string, fileId: string): Promise<void> {
+  async revokeAccessToken(rawToken: string): Promise<void> {
     await this.tokenModel.deleteOne({
       kind: 'access',
       tokenHash: hashToken(rawToken),
-      fileId,
     });
   }
-
-  async consumeLaunchToken(
-    rawToken: string,
-  ): Promise<TokenDocument> {
-    const token = await this.tokenModel.findOneAndUpdate(
-      {
-        kind: 'launch',
-        tokenHash: hashToken(rawToken),
-        expiresAt: { $gt: new Date() },
-        usedAt: null,
-      },
-      {
-        $set: { usedAt: new Date() },
-      },
-      { new: true },
-    );
-
-    if (!token) {
-      throw new UnauthorizedException('Invalid or already-used launch token');
-    }
-
-    return token;
-  }
-
 }
