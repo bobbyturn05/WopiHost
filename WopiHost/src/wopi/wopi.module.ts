@@ -6,10 +6,11 @@ import { TokensModule } from '../tokens/tokens.module';
 import { LocksModule } from '../locks/locks.module';
 import { WopiController } from './wopi.controller';
 import { WopiService } from './wopi.service';
+import { FileIdentitiesModule } from '../file-identities/file-identities.module';
 import { WopiAuthService } from './wopi-auth.service';
 
 @Module({
-  imports: [DiscoveryModule, StorageModule, TokensModule, LocksModule],
+  imports: [DiscoveryModule, StorageModule, TokensModule, LocksModule, FileIdentitiesModule],
   controllers: [WopiController],
   providers: [WopiService, WopiAuthService, ProofKeyService],
 })

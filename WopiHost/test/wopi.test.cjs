@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { WopiService } = require('../dist/wopi/wopi.service');
 
 const access = {
+  fileId: 'c'.repeat(64),
   bucket: 'documents',
   key: 'slides/test.pptx',
   userId: 'user-1',
@@ -63,7 +64,7 @@ test('PutFile uses the active lock, current ETag, preserved tags, and operation 
     async putObject(...args) { writeArguments = args; return { versionId: 'version-2' }; },
   };
   const locks = {
-    async withDocumentOperation(bucket, key, operation) {
+    async withDocumentOperation(fileId, operation) {
       return operation(async () => { leaseAssertions += 1; }, operationController.signal);
     },
     async assertPutFileLock(...args) { lockArguments = args; },
@@ -75,7 +76,7 @@ test('PutFile uses the active lock, current ETag, preserved tags, and operation 
   const result = await service.putFile({ ...access, mode: 'edit' }, content, 'active-lock');
 
   assert.equal(result.Version, 'version-2');
-  assert.deepEqual(lockArguments, ['documents', 'slides/test.pptx', 'active-lock', 100]);
+  assert.deepEqual(lockArguments, ['c'.repeat(64), 'documents', 'slides/test.pptx', 'active-lock', 100]);
   assert.deepEqual(tagArguments, ['documents', 'slides/test.pptx', 'version-1']);
   assert.equal(writeArguments[2], content);
   assert.equal(writeArguments[4].ownerid, 'owner-1');
@@ -123,4 +124,60 @@ test('GetFile requests the exact MinIO version observed by CheckFileInfo', async
   assert.deepEqual(getArguments, ['documents', 'slides/test.pptx', 'version-7', '"etag"']);
   assert.equal(result.stream, stream);
   assert.equal(result.size, 10);
+});
+
+
+test('PutFile reconciles an ambiguous MinIO response when the revision was committed', async () => {
+  let revision;
+  let statCalls = 0;
+  const minio = {
+    async statObject() {
+      statCalls += 1;
+      return {
+        filename: 'test.pptx', size: 100, contentType: 'application/octet-stream', etag: 'etag-1',
+        metadata: statCalls === 1 ? {} : { 'wopi-revision': revision },
+        headers: {}, versionId: statCalls === 1 ? 'version-1' : 'version-committed',
+      };
+    },
+    async getObjectTags() { return {}; },
+    async putObject(_bucket, _key, _content, _type, metadata) {
+      revision = metadata['wopi-revision'];
+      throw new Error('connection reset after MinIO committed the write');
+    },
+  };
+  const locks = {
+    async withDocumentOperation(_fileId, operation) { return operation(async () => undefined, new AbortController().signal); },
+    async assertPutFileLock() {},
+    async getLock() { return 'active-lock'; },
+  };
+  const service = new WopiService(minio, locks, { getOrThrow: () => 1000 });
+  const result = await service.putFile({ ...access, mode: 'edit' }, Buffer.from('saved'), 'active-lock');
+  assert.equal(result.Version, 'version-committed');
+  assert.equal(statCalls, 2);
+});
+
+
+test('PutFile treats a retried save with the already-committed content hash as successful without another write', async () => {
+  const content = Buffer.from('same saved bytes');
+  const contentHash = require('node:crypto').createHash('sha256').update(content).digest('hex');
+  let writes = 0;
+  const minio = {
+    async statObject() {
+      return {
+        filename: 'test.pptx', size: content.length, contentType: 'application/octet-stream',
+        etag: 'etag-after-save', versionId: 'version-already-saved',
+        metadata: { 'wopi-content-sha256': contentHash }, headers: {},
+      };
+    },
+    async getObjectTags() { return {}; },
+    async putObject() { writes += 1; return { versionId: 'unexpected' }; },
+  };
+  const locks = {
+    async withDocumentOperation(_fileId, operation) { return operation(async () => undefined, new AbortController().signal); },
+    async assertPutFileLock() {},
+  };
+  const service = new WopiService(minio, locks, { getOrThrow: () => 1000 });
+  const result = await service.putFile({ ...access, mode: 'edit' }, content, 'active-lock');
+  assert.equal(result.Version, 'version-already-saved');
+  assert.equal(writes, 0);
 });

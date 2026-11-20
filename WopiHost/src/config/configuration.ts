@@ -31,7 +31,6 @@ export const configuration = () => ({
     maxConcurrentUploads: Number(process.env.WOPI_MAX_CONCURRENT_UPLOADS ?? 4),
     lockTtlSeconds: Number(process.env.WOPI_LOCK_TTL_SECONDS ?? 1800),
     operationLeaseTtlSeconds: Number(process.env.WOPI_OPERATION_LEASE_TTL_SECONDS ?? 120),
-    fileIdSecret: process.env.WOPI_FILE_ID_SECRET,
     serverVersion: process.env.WOPI_SERVER_VERSION ?? '1.0.0',
     machineName: process.env.WOPI_MACHINE_NAME ?? 'wopi-host',
   },

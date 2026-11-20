@@ -12,9 +12,11 @@ export class WopiExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const body = exception.getResponse();
 
-      if (status === 409 && typeof body === 'object' && body !== null && 'currentLock' in body) {
-        const currentLock = (body as { currentLock?: unknown }).currentLock;
-        if (typeof currentLock === 'string') response.setHeader('X-WOPI-Lock', currentLock);
+      if (status === 409) {
+        const currentLock = typeof body === 'object' && body !== null && 'currentLock' in body
+          ? (body as { currentLock?: unknown }).currentLock
+          : '';
+        response.setHeader('X-WOPI-Lock', typeof currentLock === 'string' ? currentLock : '');
       }
 
       if (status === 503) response.setHeader('Retry-After', '1');

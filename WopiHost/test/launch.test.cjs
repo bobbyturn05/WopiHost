@@ -7,7 +7,7 @@ function createService({ consumeFails = false } = {}) {
   const tokens = {
     async findLaunchToken(token) {
       calls.push(['findLaunchToken', token]);
-      return { bucket: 'documents', key: 'slides/test.pptx', userId: 'user-1', mode: 'view' };
+      return { fileId: 'a'.repeat(64), userId: 'user-1', mode: 'view' };
     },
     async create(value) {
       calls.push(['create', value]);
@@ -27,6 +27,7 @@ function createService({ consumeFails = false } = {}) {
       return 'https://office.example.test/embed?one=1&two=2';
     },
   };
+  const identities = { async findByFileId(fileId) { calls.push(['findByFileId', fileId]); return { bucket: 'documents', key: 'slides/test.pptx' }; } };
   const minio = {
     async statObject(bucket, key) {
       calls.push(['statObject', bucket, key]);
@@ -36,24 +37,27 @@ function createService({ consumeFails = false } = {}) {
   const config = {
     getOrThrow(name) {
       return {
-        'wopi.fileIdSecret': 'a-stable-test-secret-with-more-than-32-characters',
         'wopi.maxFileSizeBytes': 1000,
         'tokens.accessTtlSeconds': 28800,
         'app.publicWopiOrigin': 'https://wopi.example.test',
       }[name];
     },
   };
-  return { service: new LaunchService(tokens, discovery, minio, config), calls };
+  return { service: new LaunchService(tokens, discovery, minio, identities, config), calls };
 }
 
 test('launch creates an escaped Office form and consumes the launch token once', async () => {
   const { service, calls } = createService();
-  const result = await service.createOfficeLaunch('launch-token');
+  const result = await service.createOfficeLaunch('launch-token', { wdFoo: 'bar', wdPreviousSession: 'old' });
 
   assert.match(result.contentSecurityPolicy, /form-action https:\/\/office\.example\.test/);
-  assert.match(result.html, /action="https:\/\/office\.example\.test\/embed\?one=1&amp;two=2"/);
+  assert.match(result.html, /action="https:\/\/office\.example\.test\/embed\?one=1&amp;two=2&amp;wdFoo=bar&amp;wdPreviousSession=old"/);
   assert.match(result.html, /name="access_token" value="access-token"/);
-  assert.match(result.html, /name="WOPISrc" value="https:\/\/wopi\.example\.test\/wopi\/files\/[a-f0-9]{64}"/);
+  assert.match(result.html, /wdFoo=bar/);
+  assert.match(result.html, /wdPreviousSession/);
+  assert.match(result.html, /url\.searchParams\.delete\('wdPreviousSession'\)/);
+  assert.match(result.html, /url\.searchParams\.delete\('wdPreviousCorrelation'\)/);
+  assert.match(result.html, /name="WOPISrc" value="https:\/\/wopi\.example\.test\/wopi\/files\/a{64}"/);
   assert.equal(calls.some(([name]) => name === 'consumeLaunchToken'), true);
 });
 

@@ -18,6 +18,7 @@ function createService({ size = 100, allowedBuckets = ['documents'] } = {}) {
       return { size };
     },
   };
+  const identities = { async getOrCreate(bucket, key) { calls.push(['getOrCreateIdentity', bucket, key]); return { fileId: 'b'.repeat(64) }; } };
   const tokens = {
     async create(value) {
       calls.push(['createToken', value]);
@@ -34,7 +35,7 @@ function createService({ size = 100, allowedBuckets = ['documents'] } = {}) {
       }[name];
     },
   };
-  return { service: new PresignService(minio, tokens, config), calls };
+  return { service: new PresignService(minio, tokens, identities, config), calls };
 }
 
 test('presign validates bucket access and versioning before creating a launch token', async () => {
@@ -46,9 +47,11 @@ test('presign validates bucket access and versioning before creating a launch to
     ['checkBucket', 'documents'],
     ['statObject', 'documents', 'slides/test.pptx'],
   ]);
-  assert.equal(calls[2][0], 'createToken');
-  assert.equal(calls[2][1].kind, 'launch');
-  assert.equal(calls[2][1].mode, 'edit');
+  assert.equal(calls[2][0], 'getOrCreateIdentity');
+  assert.equal(calls[3][0], 'createToken');
+  assert.equal(calls[3][1].kind, 'launch');
+  assert.equal(calls[3][1].fileId, 'b'.repeat(64));
+  assert.equal(calls[3][1].mode, 'edit');
 });
 
 test('presign rejects buckets outside the configured allow-list', async () => {

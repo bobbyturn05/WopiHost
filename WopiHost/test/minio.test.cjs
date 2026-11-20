@@ -78,6 +78,19 @@ test('PutObject fails safely when a conditional write detects a concurrent updat
 
   await assert.rejects(
     () => service.putObject('documents', 'slides/test.pptx', Buffer.from('x'), 'application/octet-stream', {}, {}, {}, '"etag"'),
-    (error) => error.getStatus() === 500,
+    (error) => error.getStatus() === 409,
+  );
+});
+
+
+test('MinIO network timeouts are reported as retryable service-unavailable errors', async () => {
+  const client = {
+    async send() { const error = new Error('socket timed out'); error.code = 'ETIMEDOUT'; throw error; },
+    destroy() {},
+  };
+  const service = new MinioService(client);
+  await assert.rejects(
+    () => service.statObject('documents', 'slides/test.pptx'),
+    (error) => error.getStatus() === 503,
   );
 });

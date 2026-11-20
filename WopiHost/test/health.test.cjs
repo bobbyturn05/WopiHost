@@ -9,17 +9,23 @@ function createHealthController({ databaseReady = true, databasePingFails = fals
       { name: '_id_' },
       { name: 'tokenHash_1', unique: true, key: { tokenHash: 1 } },
       { name: 'expiresAt_1', expireAfterSeconds: 0, key: { expiresAt: 1 } },
-      { name: 'session_revocation_1', key: { bucket: 1, key: 1, kind: 1, userId: 1 } },
+      { name: 'file_session_revocation_1', key: { fileId: 1, kind: 1, userId: 1 } },
     ],
     wopi_locks: [
       { name: '_id_' },
-      { name: 'bucket_1_key_1', unique: true, key: { bucket: 1, key: 1 } },
+      { name: 'fileId_1', unique: true, key: { fileId: 1 } },
       { name: 'expiresAt_1', expireAfterSeconds: 0, key: { expiresAt: 1 } },
     ],
     wopi_operation_leases: [
       { name: '_id_' },
-      { name: 'bucket_1_key_1', unique: true, key: { bucket: 1, key: 1 } },
+      { name: 'fileId_1', unique: true, key: { fileId: 1 } },
       { name: 'expiresAt_1', expireAfterSeconds: 0, key: { expiresAt: 1 } },
+    ],
+    wopi_file_identities: [
+      { name: '_id_' },
+      { name: 'fileId_1', unique: true, key: { fileId: 1 } },
+      { name: 'bucket_1_key_1', unique: true, key: { bucket: 1, key: 1 } },
+      { name: 'previous_location_lookup_1', key: { 'previousLocations.bucket': 1, 'previousLocations.key': 1 } },
     ],
   };
   const controller = new HealthController(

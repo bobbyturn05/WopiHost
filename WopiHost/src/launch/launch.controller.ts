@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Req, Res } from '@nestjs/common';
+import type { Request } from 'express';
 import type { Response } from 'express';
 import { LaunchService } from './launch.service';
 
@@ -7,13 +8,13 @@ export class LaunchController {
   constructor(private readonly launchService: LaunchService) {}
 
   @Get(':token')
-  async launch(@Param('token') token: string, @Res() response: Response) {
+  async launch(@Param('token') token: string, @Req() request: Request, @Res() response: Response) {
     response.setHeader('Cache-Control', 'no-store, max-age=0');
     response.setHeader('Pragma', 'no-cache');
     response.setHeader('Referrer-Policy', 'no-referrer');
     response.setHeader('X-Content-Type-Options', 'nosniff');
 
-    const launch = await this.launchService.createOfficeLaunch(token);
+    const launch = await this.launchService.createOfficeLaunch(token, request.query);
 
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.setHeader('Content-Security-Policy', launch.contentSecurityPolicy);

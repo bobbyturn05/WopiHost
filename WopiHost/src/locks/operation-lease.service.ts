@@ -17,9 +17,9 @@ export class OperationLeaseService {
     private readonly leaseTtlMs: number,
   ) {}
 
-  async run<T>(bucket: string, key: string, operation: DocumentOperation<T>): Promise<T> {
+  async run<T>(fileId: string, operation: DocumentOperation<T>): Promise<T> {
     const ownerToken = randomUUID();
-    await this.acquire(bucket, key, ownerToken);
+    await this.acquire(fileId, ownerToken);
 
     let heartbeatRunning = false;
     let heartbeatError: unknown;
@@ -29,7 +29,7 @@ export class OperationLeaseService {
       heartbeatRunning = true;
       try {
         const result = await this.leaseModel.updateOne(
-          { bucket, key, ownerToken, expiresAt: { $gt: new Date() } },
+          { fileId, ownerToken, expiresAt: { $gt: new Date() } },
           { $set: { expiresAt: this.expiration() } },
         );
         if (result.matchedCount !== 1) {
@@ -52,7 +52,7 @@ export class OperationLeaseService {
 
       try {
         const result = await this.leaseModel.updateOne(
-          { bucket, key, ownerToken, expiresAt: { $gt: new Date() } },
+          { fileId, ownerToken, expiresAt: { $gt: new Date() } },
           { $set: { expiresAt: this.expiration() } },
         );
         if (result.matchedCount !== 1) {
@@ -74,17 +74,16 @@ export class OperationLeaseService {
       return await operation(assertLease, abortController.signal);
     } finally {
       clearInterval(heartbeat);
-      await this.leaseModel.deleteOne({ bucket, key, ownerToken }).catch(() => undefined);
+      await this.leaseModel.deleteOne({ fileId, ownerToken }).catch(() => undefined);
     }
   }
 
-  private async acquire(bucket: string, key: string, ownerToken: string): Promise<void> {
+  private async acquire(fileId: string, ownerToken: string): Promise<void> {
     const now = new Date();
     try {
       const lease = await this.leaseModel.findOneAndUpdate(
         {
-          bucket,
-          key,
+          fileId,
           $or: [
             { expiresAt: { $lte: now } },
             { ownerToken },
@@ -92,8 +91,7 @@ export class OperationLeaseService {
         },
         {
           $set: {
-            bucket,
-            key,
+            fileId,
             ownerToken,
             expiresAt: this.expiration(),
           },

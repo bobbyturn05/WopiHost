@@ -13,17 +13,15 @@
    - `INTERNAL_SERVICE_TOKEN` (at least 32 characters)
    - `MINIO_ACCESS_KEY`
    - `MINIO_SECRET_KEY`
-   - `WOPI_FILE_ID_SECRET` (stable, random, at least 32 characters)
 
    Example (supply values from your secret manager, do not commit them):
 
    ```sh
-   oc create secret generic wopi-host-secrets \\
-     --from-literal=MONGODB_URI='...' \\
-     --from-literal=INTERNAL_SERVICE_TOKEN='...' \\
-     --from-literal=MINIO_ACCESS_KEY='...' \\
-     --from-literal=MINIO_SECRET_KEY='...' \\
-     --from-literal=WOPI_FILE_ID_SECRET='...'
+   oc create secret generic wopi-host-secrets \
+     --from-literal=MONGODB_URI='...' \
+     --from-literal=INTERNAL_SERVICE_TOKEN='...' \
+     --from-literal=MINIO_ACCESS_KEY='...' \
+     --from-literal=MINIO_SECRET_KEY='...'
    ```
 
 3. Replace the example image, public hostname, MinIO endpoint, Office discovery URL/origins, and bucket name in the manifests. Keep `PUBLIC_WOPI_ORIGIN` identical to the public Route origin.
@@ -40,6 +38,8 @@
    ```
 
 5. Grant the MinIO identity `s3:ListBucket` and `s3:GetBucketVersioning` on each configured bucket, plus `s3:GetObject`, `s3:GetObjectVersion`, `s3:PutObject`, `s3:GetObjectTagging`, `s3:GetObjectVersionTagging`, and `s3:PutObjectTagging` on the required object prefixes. Enable bucket versioning before the first write using separate provisioning/admin credentials (the `enable-minio-versioning.sh` script uses the supplied credentials for that purpose). At the bucket-configuration level, the runtime application identity should have only `s3:GetBucketVersioning`; do not grant it `s3:PutBucketVersioning` or other bucket-administration actions.
+
+For upgrades from the previous HMAC-based file IDs, stop the old WOPI deployment and run `WOPI_FILE_ID_SECRET='<previous value>' node scripts/migrate-file-identities.mjs` once, then run `node scripts/create-mongo-indexes.mjs`. Back up MongoDB first. The old secret is migration-only and must not be configured at runtime. New installs only need `node scripts/create-mongo-indexes.mjs`.
 
 The deployment uses two replicas and requires MongoDB indexes to be created before rollout. The readiness probe checks a live MongoDB ping, the required MongoDB indexes, Office discovery initialization, and HeadBucket plus enabled-versioning status for every configured MinIO bucket. The liveness probe only checks that the process is responsive.
 

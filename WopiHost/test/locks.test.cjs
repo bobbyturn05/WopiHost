@@ -7,30 +7,31 @@ function createService(currentLock = null) {
     { findOne: () => ({ lean: async () => currentLock }) },
     30_000,
     {},
+    { async findByFileId() { return { fileId: 'file-id', bucket: 'documents', key: 'test.pptx' }; } },
   );
 }
 
 test('allows the initial save only for an unlocked zero-byte file without a lock header', async () => {
-  await assert.doesNotReject(() => createService().assertPutFileLock('documents', 'empty.pptx', undefined, 0));
+  await assert.doesNotReject(() => createService().assertPutFileLock('file-id', 'documents', 'test.pptx', undefined, 0));
 });
 
 test('rejects an unlocked zero-byte file when a stale lock header is supplied', async () => {
   await assert.rejects(
-    () => createService().assertPutFileLock('documents', 'empty.pptx', 'stale-lock', 0),
+    () => createService().assertPutFileLock('file-id', 'documents', 'test.pptx', 'stale-lock', 0),
     (error) => error.getStatus() === 409,
   );
 });
 
 test('rejects an unlocked non-empty file', async () => {
   await assert.rejects(
-    () => createService().assertPutFileLock('documents', 'existing.pptx', undefined, 10),
+    () => createService().assertPutFileLock('file-id', 'documents', 'test.pptx', undefined, 10),
     (error) => error.getStatus() === 409,
   );
 });
 
 test('rejects a lock header that does not match the active lock', async () => {
   await assert.rejects(
-    () => createService({ lockId: 'active-lock' }).assertPutFileLock('documents', 'existing.pptx', 'other-lock', 10),
+    () => createService({ lockId: 'active-lock' }).assertPutFileLock('file-id', 'documents', 'test.pptx', 'other-lock', 10),
     (error) => error.getStatus() === 409,
   );
 });
@@ -45,12 +46,12 @@ test('Lock honors the requested extended lock expiration timeout', async () => {
     },
   };
   const operationLease = {
-    run: async (_bucket, _key, operation) => operation(async () => undefined),
+    run: async (_fileId, operation) => operation(async () => undefined),
   };
-  const service = new LocksService(lockModel, 180_000, operationLease);
+  const service = new LocksService(lockModel, 180_000, operationLease, { async findByFileId() { return { fileId: 'file-id', bucket: 'documents', key: 'test.pptx' }; } });
   const startedAt = Date.now();
 
-  await service.lock('documents', 'a.pptx', 'lock-1', 360_000);
+  await service.lock('file-id', 'documents', 'test.pptx', 'lock-1', 360_000);
 
   assert.ok(update.changes.$set.expiresAt.getTime() >= startedAt + 359_000);
   assert.ok(update.changes.$set.expiresAt.getTime() <= startedAt + 361_000);
@@ -65,9 +66,9 @@ test('PutFile verifies the active lock without extending its expiration', async 
       return { matchedCount: 1 };
     },
   };
-  const service = new LocksService(lockModel, 180_000, {});
+  const service = new LocksService(lockModel, 180_000, {}, { async findByFileId() { return { fileId: 'file-id', bucket: 'documents', key: 'test.pptx' }; } });
 
-  await service.assertPutFileLock('documents', 'a.pptx', 'active-lock', 100);
+  await service.assertPutFileLock('file-id', 'documents', 'test.pptx', 'active-lock', 100);
   assert.equal(updates, 0);
 });
 
@@ -81,4 +82,18 @@ test('LockExpirationTimeout accepts the WOPI range and rejects invalid values', 
   assert.throws(() => controller.parseLockExpirationTimeout('59'), (error) => error.getStatus() === 400);
   assert.throws(() => controller.parseLockExpirationTimeout('3601'), (error) => error.getStatus() === 400);
   assert.throws(() => controller.parseLockExpirationTimeout('60s'), (error) => error.getStatus() === 400);
+});
+
+
+test('PutFile rejects a stale WOPI session after the document location changes', async () => {
+  const service = new LocksService(
+    { findOne: () => ({ lean: async () => null }) },
+    30_000,
+    {},
+    { async findByFileId() { return { fileId: 'file-id', bucket: 'archive', key: 'renamed.pptx' }; } },
+  );
+  await assert.rejects(
+    () => service.assertPutFileLock('file-id', 'documents', 'old.pptx', undefined, 0),
+    (error) => error.getStatus() === 409,
+  );
 });

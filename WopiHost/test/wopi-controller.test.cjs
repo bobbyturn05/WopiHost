@@ -4,7 +4,7 @@ const { WopiController } = require('../dist/wopi/wopi.controller');
 
 test('PutFile accepts an explicitly empty octet-stream body', async () => {
   let savedContent;
-  const auth = { async authorize() { return { bucket: 'documents', key: 'empty.docx', mode: 'edit' }; } };
+  const auth = { async authorize() { return { fileId: 'a'.repeat(64), bucket: 'documents', key: 'empty.docx', mode: 'edit' }; } };
   const wopi = {
     async putFile(_access, content) { savedContent = content; return { Version: 'version-1' }; },
   };

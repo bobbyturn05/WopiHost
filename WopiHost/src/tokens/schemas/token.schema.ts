@@ -12,10 +12,7 @@ export class Token {
   tokenHash: string;
 
   @Prop({ required: true })
-  bucket: string;
-
-  @Prop({ required: true })
-  key: string;
+  fileId: string;
 
   @Prop({ required: true })
   userId: string;
@@ -28,4 +25,4 @@ export class Token {
 }
 
 export const TokenSchema = SchemaFactory.createForClass(Token);
-TokenSchema.index({ bucket: 1, key: 1, kind: 1, userId: 1 });
+TokenSchema.index({ fileId: 1, kind: 1, userId: 1 }, { name: 'file_session_revocation_1' });

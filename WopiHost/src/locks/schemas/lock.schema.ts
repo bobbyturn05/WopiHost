@@ -6,10 +6,7 @@ export type LockDocument = HydratedDocument<WopiLock>;
 @Schema({ collection: 'wopi_locks' })
 export class WopiLock {
   @Prop({ required: true })
-  bucket: string;
-
-  @Prop({ required: true })
-  key: string;
+  fileId: string;
 
   @Prop({ required: true })
   lockId: string;
@@ -21,7 +18,7 @@ export class WopiLock {
 export const WopiLockSchema = SchemaFactory.createForClass(WopiLock);
 
 WopiLockSchema.index(
-  { bucket: 1, key: 1 },
+  { fileId: 1 },
   { unique: true },
 );
 

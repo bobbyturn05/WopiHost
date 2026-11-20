@@ -46,7 +46,6 @@ export const envValidationSchema = Joi.object({
   WOPI_MAX_CONCURRENT_UPLOADS: Joi.number().integer().min(1).max(32).default(4),
   WOPI_LOCK_TTL_SECONDS: Joi.number().valid(1800).default(1800),
   WOPI_OPERATION_LEASE_TTL_SECONDS: Joi.number().integer().min(120).max(600).default(120),
-  WOPI_FILE_ID_SECRET: Joi.string().min(32).required(),
   WOPI_SERVER_VERSION: Joi.string().pattern(/^[A-Za-z0-9._-]{1,64}$/).default('1.0.0'),
   WOPI_MACHINE_NAME: Joi.string().pattern(/^[A-Za-z0-9._-]{1,64}$/).default('wopi-host'),
   OFFICE_DISCOVERY_URL: Joi.alternatives().conditional('NODE_ENV', {

@@ -79,6 +79,10 @@ async function bootstrap() {
   }));
 
   await app.listen(config.getOrThrow<number>('app.port'));
+  const server = app.getHttpServer();
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 300_000;
+  server.keepAliveTimeout = 5_000;
 }
 
 bootstrap();

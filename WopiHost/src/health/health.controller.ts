@@ -61,28 +61,34 @@ export class HealthController {
     if (!db) return false;
 
     try {
-      const [tokenIndexes, lockIndexes, leaseIndexes] = await Promise.all([
+      const [tokenIndexes, lockIndexes, leaseIndexes, identityIndexes] = await Promise.all([
         db.collection('wopi_tokens').listIndexes().toArray(),
         db.collection('wopi_locks').listIndexes().toArray(),
         db.collection('wopi_operation_leases').listIndexes().toArray(),
+        db.collection('wopi_file_identities').listIndexes().toArray(),
       ]);
 
       const tokenHash = tokenIndexes.find((index) => index.name === 'tokenHash_1');
       const tokenExpiry = tokenIndexes.find((index) => index.name === 'expiresAt_1');
-      const sessionRevocation = tokenIndexes.find((index) => index.name === 'session_revocation_1');
-      const lockIdentity = lockIndexes.find((index) => index.name === 'bucket_1_key_1');
+      const sessionRevocation = tokenIndexes.find((index) => index.name === 'file_session_revocation_1');
+      const lockIdentity = lockIndexes.find((index) => index.name === 'fileId_1');
       const lockExpiry = lockIndexes.find((index) => index.name === 'expiresAt_1');
-      const leaseIdentity = leaseIndexes.find((index) => index.name === 'bucket_1_key_1');
+      const leaseIdentity = leaseIndexes.find((index) => index.name === 'fileId_1');
       const leaseExpiry = leaseIndexes.find((index) => index.name === 'expiresAt_1');
+      const identityId = identityIndexes.find((index) => index.name === 'fileId_1');
+      const identityLocation = identityIndexes.find((index) => index.name === 'bucket_1_key_1');
+      const previousLocationLookup = identityIndexes.find((index) => index.name === 'previous_location_lookup_1');
 
       return tokenHash?.unique === true && tokenHash.key?.tokenHash === 1 &&
         tokenExpiry?.expireAfterSeconds === 0 && tokenExpiry.key?.expiresAt === 1 &&
-        sessionRevocation?.key?.bucket === 1 && sessionRevocation.key?.key === 1 &&
-        sessionRevocation.key?.kind === 1 && sessionRevocation.key?.userId === 1 &&
-        lockIdentity?.unique === true && lockIdentity.key?.bucket === 1 && lockIdentity.key?.key === 1 &&
+        sessionRevocation?.key?.fileId === 1 && sessionRevocation.key?.kind === 1 && sessionRevocation.key?.userId === 1 &&
+        lockIdentity?.unique === true && lockIdentity.key?.fileId === 1 &&
         lockExpiry?.expireAfterSeconds === 0 && lockExpiry.key?.expiresAt === 1 &&
-        leaseIdentity?.unique === true && leaseIdentity.key?.bucket === 1 && leaseIdentity.key?.key === 1 &&
-        leaseExpiry?.expireAfterSeconds === 0 && leaseExpiry.key?.expiresAt === 1;
+        leaseIdentity?.unique === true && leaseIdentity.key?.fileId === 1 &&
+        leaseExpiry?.expireAfterSeconds === 0 && leaseExpiry.key?.expiresAt === 1 &&
+        identityId?.unique === true && identityId.key?.fileId === 1 &&
+        identityLocation?.unique === true && identityLocation.key?.bucket === 1 && identityLocation.key?.key === 1 &&
+        previousLocationLookup?.key?.['previousLocations.bucket'] === 1 && previousLocationLookup.key?.['previousLocations.key'] === 1;
     } catch {
       return false;
     }

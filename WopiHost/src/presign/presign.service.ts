@@ -2,18 +2,23 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MinioService } from '../storage/minio.service';
 import { TokensService } from '../tokens/tokens.service';
 import { PresignRequestDto } from './dto/presign-request.dto';
+import { FileIdentitiesService } from '../file-identities/file-identities.service';
 
 @Injectable()
 export class PresignService {
+  private readonly logger = new Logger(PresignService.name);
+
   constructor(
     private readonly minioService: MinioService,
     private readonly tokensService: TokensService,
+    private readonly identities: FileIdentitiesService,
     private readonly config: ConfigService,
   ) {}
 
@@ -38,19 +43,20 @@ export class PresignService {
       );
     }
 
+    const identity = await this.identities.getOrCreate(dto.bucket, dto.key);
     const expiresAt = new Date(
       Date.now() + this.config.getOrThrow<number>('tokens.launchTtlSeconds') * 1000,
     );
     const token = await this.tokensService.create({
       kind: 'launch',
-      bucket: dto.bucket,
-      key: dto.key,
+      fileId: identity.fileId,
       userId: dto.userId,
       mode: dto.mode,
       expiresAt,
     });
 
     const origin = this.config.getOrThrow<string>('app.publicWopiOrigin').replace(/\/+$/, '');
+    this.logger.log(JSON.stringify({ event: 'wopi.launch.issued', fileId: identity.fileId, userId: dto.userId, mode: dto.mode }));
     return { launchUrl: `${origin}/launch/${token}`, expiresAt };
   }
 }

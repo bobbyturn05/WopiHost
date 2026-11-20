@@ -11,6 +11,7 @@ import {
 import {
   Inject,
   Injectable,
+  ConflictException,
   InternalServerErrorException,
   NotFoundException,
   OnModuleDestroy,
@@ -210,7 +211,7 @@ export class MinioService implements OnModuleDestroy {
         storageError.$metadata?.httpStatusCode === 412 ||
         storageError.$metadata?.httpStatusCode === 409
       ) {
-        throw new InternalServerErrorException('Document changed in storage before the save could be committed');
+        throw new ConflictException('Document changed in storage before the save could be committed');
       }
       this.handleStorageError(error);
     }
@@ -219,14 +220,25 @@ export class MinioService implements OnModuleDestroy {
   private handleStorageError(error: unknown): never {
     const storageError = error as {
       name?: string;
+      code?: string;
       $metadata?: { httpStatusCode?: number };
     };
+
+    if (
+      storageError.name === 'TimeoutError' ||
+      storageError.name === 'AbortError' ||
+      storageError.name === 'RequestTimeout' ||
+      ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'EHOSTUNREACH'].includes(storageError.code ?? '') ||
+      (storageError.$metadata?.httpStatusCode ?? 0) >= 500
+    ) {
+      throw new ServiceUnavailableException('MinIO is temporarily unavailable');
+    }
 
     if (
       storageError.name === 'PreconditionFailed' ||
       storageError.$metadata?.httpStatusCode === 412
     ) {
-      throw new InternalServerErrorException('Document changed in storage during the WOPI operation');
+      throw new ConflictException('Document changed in storage during the WOPI operation');
     }
 
     if (

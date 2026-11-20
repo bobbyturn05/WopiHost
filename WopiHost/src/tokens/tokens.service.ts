@@ -6,8 +6,7 @@ import { Token, TokenDocument } from './schemas/token.schema';
 
 export interface CreateTokenInput {
   kind: 'launch' | 'access';
-  bucket: string;
-  key: string;
+  fileId: string;
   userId: string;
   mode: 'view' | 'edit';
   expiresAt: Date;
@@ -89,12 +88,11 @@ export class TokensService {
     }
   }
 
-  async revokeSessions(bucket: string, key: string, userId?: string): Promise<number> {
+  async revokeSessions(fileId: string, userId?: string): Promise<number> {
     const result = await this.tokenModel.deleteMany({
       kind: { $in: ['launch', 'access'] },
-      bucket,
-      key,
-      ...(userId ? { userId } : {}),
+      fileId,
+      ...(userId !== undefined ? { userId } : {}),
     });
 
     return result.deletedCount;

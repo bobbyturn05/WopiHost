@@ -6,9 +6,11 @@ import { WopiOperationLease, WopiOperationLeaseSchema } from './schemas/operatio
 import { LocksService } from './locks.service';
 import { OperationLeaseService } from './operation-lease.service';
 import { WOPI_LOCK_TTL_MS, WOPI_OPERATION_LEASE_TTL_MS } from './consts';
+import { FileIdentitiesModule } from '../file-identities/file-identities.module';
 
 @Module({
   imports: [
+    FileIdentitiesModule,
     MongooseModule.forFeature([
       { name: WopiLock.name, schema: WopiLockSchema },
       { name: WopiOperationLease.name, schema: WopiOperationLeaseSchema },
