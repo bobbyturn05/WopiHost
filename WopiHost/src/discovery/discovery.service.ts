@@ -130,9 +130,9 @@ export class DiscoveryService implements OnModuleInit, OnModuleDestroy {
     this.oldProofKey =
       proofKey.oldmodulus && proofKey.oldexponent
         ? {
-            modulus: String(proofKey.oldmodulus),
-            exponent: String(proofKey.oldexponent),
-          }
+          modulus: String(proofKey.oldmodulus),
+          exponent: String(proofKey.oldexponent),
+        }
         : undefined;
   }
 
