@@ -8,13 +8,15 @@ export class LaunchController {
 
   @Get(':token')
   async launch(@Param('token') token: string, @Res() response: Response) {
-    const launch = await this.launchService.createOfficeLaunch(token);
-
-    response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store, max-age=0');
     response.setHeader('Pragma', 'no-cache');
     response.setHeader('Referrer-Policy', 'no-referrer');
     response.setHeader('X-Content-Type-Options', 'nosniff');
+
+    const launch = await this.launchService.createOfficeLaunch(token);
+
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.setHeader('Content-Security-Policy', launch.contentSecurityPolicy);
 
     return response.send(launch.html);
   }

@@ -1,0 +1,17 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: wopi-host-launch
+  annotations:
+    haproxy.router.openshift.io/timeout: 30s
+spec:
+  host: wopi.example.com
+  path: /launch
+  to:
+    kind: Service
+    name: wopi-host
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

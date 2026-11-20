@@ -8,7 +8,12 @@ import { MongooseModule } from '@nestjs/mongoose';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         uri: config.getOrThrow<string>('database.uri'),
-        autoIndex: config.get<string>('app.environment') !== 'production'
+        autoIndex: config.get<string>('app.environment') !== 'production',
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 20,
+        minPoolSize: 2
       })
     })
   ]

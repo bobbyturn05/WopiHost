@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
-import { Injectable, NotFoundException, PreconditionFailedException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, PayloadTooLargeException, PreconditionFailedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { TokenDocument } from '../tokens/schemas/token.schema';
 import { LocksService } from '../locks/locks.service';
 import { MinioService } from '../storage/minio.service';
@@ -11,10 +12,12 @@ export class WopiService {
   constructor(
     private readonly minioService: MinioService,
     private readonly locksService: LocksService,
+    private readonly config: ConfigService,
   ) {}
 
   async checkFileInfo(access: TokenDocument): Promise<CheckFileInfo> {
     const metadata = await this.minioService.statObject(access.bucket, access.key);
+    this.assertFileSize(metadata.size);
 
     return {
       BaseFileName: metadata.filename,
@@ -35,6 +38,7 @@ export class WopiService {
 
   async getFile(access: TokenDocument, maxExpectedSize: number) {
     const metadata = await this.minioService.statObject(access.bucket, access.key);
+    this.assertFileSize(metadata.size);
     if (metadata.size > maxExpectedSize) {
       throw new PreconditionFailedException('Document exceeds X-WOPI-MaxExpectedSize');
     }
@@ -45,7 +49,7 @@ export class WopiService {
 
   async putFile(access: TokenDocument, content: Buffer, lockId?: string) {
     this.assertCanWrite(access);
-    return this.locksService.withDocumentOperation(access.bucket, access.key, async (assertLease) => {
+    return this.locksService.withDocumentOperation(access.bucket, access.key, async (assertLease, operationSignal) => {
       const currentMetadata = await this.minioService.statObject(access.bucket, access.key);
       await assertLease();
       await this.locksService.assertPutFileLock(access.bucket, access.key, lockId, currentMetadata.size);
@@ -56,28 +60,38 @@ export class WopiService {
         ...currentMetadata.metadata,
         'wopi-revision': revision,
       };
+      const versionId = currentMetadata.versionId && currentMetadata.versionId !== 'null'
+        ? currentMetadata.versionId
+        : undefined;
+      const tags = await this.minioService.getObjectTags(access.bucket, access.key, versionId);
+      await assertLease();
       const result = await this.minioService.putObject(
         access.bucket,
         access.key,
         content,
         currentMetadata.contentType,
         objectMetadata,
+        currentMetadata.headers,
+        tags,
+        currentMetadata.etag,
+        operationSignal,
       );
+      await assertLease();
 
       return { Version: result.versionId && result.versionId !== 'null' ? result.versionId : revision };
     });
   }
 
-  async lock(access: TokenDocument, lockId: string): Promise<void> {
+  async lock(access: TokenDocument, lockId: string, lockExpirationTimeoutSeconds?: number): Promise<void> {
     this.assertCanWrite(access);
     await this.assertDocumentExists(access);
-    await this.locksService.lock(access.bucket, access.key, lockId);
+    await this.locksService.lock(access.bucket, access.key, lockId, this.getLockTtlMs(lockExpirationTimeoutSeconds));
   }
 
-  async refreshLock(access: TokenDocument, lockId: string): Promise<void> {
+  async refreshLock(access: TokenDocument, lockId: string, lockExpirationTimeoutSeconds?: number): Promise<void> {
     this.assertCanWrite(access);
     await this.assertDocumentExists(access);
-    await this.locksService.refresh(access.bucket, access.key, lockId);
+    await this.locksService.refresh(access.bucket, access.key, lockId, this.getLockTtlMs(lockExpirationTimeoutSeconds));
   }
 
   async unlock(access: TokenDocument, lockId: string): Promise<void> {
@@ -91,10 +105,10 @@ export class WopiService {
     return this.locksService.getLock(access.bucket, access.key);
   }
 
-  async unlockAndRelock(access: TokenDocument, oldLockId: string, newLockId: string): Promise<void> {
+  async unlockAndRelock(access: TokenDocument, oldLockId: string, newLockId: string, lockExpirationTimeoutSeconds?: number): Promise<void> {
     this.assertCanWrite(access);
     await this.assertDocumentExists(access);
-    await this.locksService.replaceLock(access.bucket, access.key, oldLockId, newLockId);
+    await this.locksService.replaceLock(access.bucket, access.key, oldLockId, newLockId, this.getLockTtlMs(lockExpirationTimeoutSeconds));
   }
 
   private async assertDocumentExists(access: TokenDocument): Promise<void> {
@@ -111,6 +125,21 @@ export class WopiService {
       ?? metadata.etag
       ?? metadata.lastModified?.toISOString()
       ?? '0';
+  }
+
+  private getLockTtlMs(lockExpirationTimeoutSeconds?: number): number {
+    const seconds = lockExpirationTimeoutSeconds ?? this.config.getOrThrow<number>('wopi.lockTtlSeconds');
+    if (!Number.isInteger(seconds) || seconds < 60 || seconds > 3600) {
+      throw new BadRequestException('X-WOPI-LockExpirationTimeout must be between 60 and 3600 seconds');
+    }
+    return seconds * 1000;
+  }
+
+  private assertFileSize(size: number): void {
+    const maxFileSize = this.config.getOrThrow<number>('wopi.maxFileSizeBytes');
+    if (size > maxFileSize) {
+      throw new PayloadTooLargeException('Document exceeds the configured WOPI file-size limit');
+    }
   }
 
   private assertCanWrite(access: TokenDocument): void {

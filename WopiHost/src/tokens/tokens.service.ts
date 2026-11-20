@@ -32,6 +32,7 @@ export class TokensService {
   }
 
   async findAccessToken(rawToken: string): Promise<TokenDocument> {
+    this.assertTokenFormat(rawToken);
     const token = await this.tokenModel.findOne({
       kind: 'access',
       tokenHash: hashToken(rawToken),
@@ -45,7 +46,23 @@ export class TokensService {
     return token;
   }
 
+  async findLaunchToken(rawToken: string): Promise<TokenDocument> {
+    this.assertTokenFormat(rawToken);
+    const token = await this.tokenModel.findOne({
+      kind: 'launch',
+      tokenHash: hashToken(rawToken),
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!token) {
+      throw new UnauthorizedException('Invalid or expired launch token');
+    }
+
+    return token;
+  }
+
   async consumeLaunchToken(rawToken: string): Promise<TokenDocument> {
+    this.assertTokenFormat(rawToken);
     const token = await this.tokenModel.findOneAndDelete({
       kind: 'launch',
       tokenHash: hashToken(rawToken),
@@ -64,5 +81,22 @@ export class TokensService {
       kind: 'access',
       tokenHash: hashToken(rawToken),
     });
+  }
+
+  private assertTokenFormat(rawToken: string): void {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) {
+      throw new UnauthorizedException('Invalid or expired WOPI token');
+    }
+  }
+
+  async revokeSessions(bucket: string, key: string, userId?: string): Promise<number> {
+    const result = await this.tokenModel.deleteMany({
+      kind: { $in: ['launch', 'access'] },
+      bucket,
+      key,
+      ...(userId ? { userId } : {}),
+    });
+
+    return result.deletedCount;
   }
 }

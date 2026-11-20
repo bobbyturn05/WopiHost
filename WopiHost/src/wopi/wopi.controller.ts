@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Headers,
@@ -37,7 +38,7 @@ export class WopiController {
     const access = await this.authService.authorize(request, fileId);
     const maxExpectedSize = maxExpectedSizeHeader ? Number(maxExpectedSizeHeader) : 0xffffffff;
 
-    if (!Number.isInteger(maxExpectedSize) || maxExpectedSize < 0 || maxExpectedSize > 0xffffffff) {
+    if ((maxExpectedSizeHeader !== undefined && !/^\d+$/.test(maxExpectedSizeHeader)) || !Number.isInteger(maxExpectedSize) || maxExpectedSize < 0 || maxExpectedSize > 0xffffffff) {
       response.sendStatus(400);
       return;
     }
@@ -47,6 +48,9 @@ export class WopiController {
     response.setHeader('Content-Type', 'application/octet-stream');
     response.setHeader('Content-Length', String(file.size));
     response.setHeader('X-WOPI-ItemVersion', file.version);
+    response.once('close', () => {
+      if (!response.writableEnded) file.stream.destroy();
+    });
     file.stream.on('error', () => {
       if (!response.headersSent) {
         response.removeHeader('Content-Length');
@@ -69,9 +73,16 @@ export class WopiController {
   ) {
     const access = await this.authService.authorize(request, fileId);
     if (override?.toUpperCase() !== 'PUT') return response.sendStatus(501);
-    if (!Buffer.isBuffer(request.body)) return response.status(400).send('Expected binary document body');
 
-    const result = await this.wopiService.putFile(access, request.body, lockId);
+    const contentType = request.headers['content-type']?.split(';', 1)[0].trim().toLowerCase();
+    const content = Buffer.isBuffer(request.body)
+      ? request.body
+      : request.headers['content-length'] === '0' && contentType === 'application/octet-stream'
+        ? Buffer.alloc(0)
+        : undefined;
+    if (!content) return response.status(400).send('Expected binary document body');
+
+    const result = await this.wopiService.putFile(access, content, lockId);
     response.setHeader('X-WOPI-ItemVersion', result.Version);
     return response.status(200).end();
   }
@@ -84,9 +95,13 @@ export class WopiController {
     @Headers('x-wopi-override') override?: string,
     @Headers('x-wopi-lock') lockId?: string,
     @Headers('x-wopi-oldlock') oldLockId?: string,
+    @Headers('x-wopi-lockexpirationtimeout') lockExpirationTimeoutHeader?: string,
   ) {
     const access = await this.authService.authorize(request, fileId);
     const operation = override?.toUpperCase();
+    const lockExpirationTimeout = operation === 'LOCK' || operation === 'REFRESH_LOCK'
+      ? this.parseLockExpirationTimeout(lockExpirationTimeoutHeader)
+      : undefined;
 
     if (operation === 'GET_LOCK') {
       response.setHeader('X-WOPI-Lock', (await this.wopiService.getLock(access)) ?? '');
@@ -95,9 +110,9 @@ export class WopiController {
 
     const operations: Record<string, () => Promise<void>> = {
       LOCK: () => oldLockId !== undefined
-        ? this.wopiService.unlockAndRelock(access, oldLockId, lockId ?? '')
-        : this.wopiService.lock(access, lockId ?? ''),
-      REFRESH_LOCK: () => this.wopiService.refreshLock(access, lockId ?? ''),
+        ? this.wopiService.unlockAndRelock(access, oldLockId, lockId ?? '', lockExpirationTimeout)
+        : this.wopiService.lock(access, lockId ?? '', lockExpirationTimeout),
+      REFRESH_LOCK: () => this.wopiService.refreshLock(access, lockId ?? '', lockExpirationTimeout),
       UNLOCK: () => this.wopiService.unlock(access, lockId ?? ''),
     };
     const execute = operation ? operations[operation] : undefined;
@@ -105,5 +120,17 @@ export class WopiController {
     if (!execute) return response.status(501).send('Unsupported WOPI override');
     await execute();
     return response.status(200).end();
+  }
+
+  private parseLockExpirationTimeout(value?: string): number | undefined {
+    if (value === undefined) return undefined;
+    if (!/^\d+$/.test(value)) {
+      throw new BadRequestException('Invalid X-WOPI-LockExpirationTimeout');
+    }
+    const seconds = Number(value);
+    if (!Number.isSafeInteger(seconds) || seconds < 60 || seconds > 3600) {
+      throw new BadRequestException('X-WOPI-LockExpirationTimeout must be between 60 and 3600 seconds');
+    }
+    return seconds;
   }
 }

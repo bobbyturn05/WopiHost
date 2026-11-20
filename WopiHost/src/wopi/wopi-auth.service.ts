@@ -14,6 +14,10 @@ export class WopiAuthService {
   ) {}
 
   async authorize(request: Request, fileId: string) {
+    if (!/^[a-f0-9]{64}$/.test(fileId)) {
+      throw new UnauthorizedException('Invalid WOPI file ID');
+    }
+
     const token = request.query.access_token;
 
     if (typeof token !== 'string' || !token) {

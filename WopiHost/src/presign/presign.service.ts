@@ -28,6 +28,7 @@ export class PresignService {
       throw new BadRequestException('The requested object key exceeds the S3 key-length limit');
     }
 
+    await this.minioService.checkBucket(dto.bucket);
     const metadata = await this.minioService.statObject(dto.bucket, dto.key);
     const maxFileSize = this.config.getOrThrow<number>('wopi.maxFileSizeBytes');
 

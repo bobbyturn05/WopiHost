@@ -13,11 +13,11 @@ export class LocksService {
     private readonly operationLease: OperationLeaseService,
   ) {}
 
-  withDocumentOperation<T>(bucket: string, key: string, operation: (assertLease: () => Promise<void>) => Promise<T>): Promise<T> {
+  withDocumentOperation<T>(bucket: string, key: string, operation: (assertLease: () => Promise<void>, signal: AbortSignal) => Promise<T>): Promise<T> {
     return this.operationLease.run(bucket, key, operation);
   }
 
-  async lock(bucket: string, key: string, lockId: string): Promise<void> {
+  async lock(bucket: string, key: string, lockId: string, lockTtlMs = this.lockTtlMs): Promise<void> {
     this.assertLockId(lockId);
     await this.withDocumentOperation(bucket, key, async (assertLease) => {
       const now = new Date();
@@ -26,22 +26,24 @@ export class LocksService {
       await assertLease();
       await this.lockModel.updateOne(
         { bucket, key },
-        { $set: { bucket, key, lockId, expiresAt: new Date(Date.now() + this.lockTtlMs) } },
+        { $set: { bucket, key, lockId, expiresAt: new Date(Date.now() + lockTtlMs) } },
         { upsert: true },
       );
+      await assertLease();
     });
   }
 
-  async refresh(bucket: string, key: string, lockId: string): Promise<void> {
+  async refresh(bucket: string, key: string, lockId: string, lockTtlMs = this.lockTtlMs): Promise<void> {
     this.assertLockId(lockId);
     await this.withDocumentOperation(bucket, key, async (assertLease) => {
       await assertLease();
       const now = new Date();
       const result = await this.lockModel.updateOne(
         { bucket, key, lockId, expiresAt: { $gt: now } },
-        { $set: { expiresAt: new Date(Date.now() + this.lockTtlMs) } },
+        { $set: { expiresAt: new Date(Date.now() + lockTtlMs) } },
       );
       if (result.matchedCount === 0) throw this.lockConflict('Lock does not match', await this.getLock(bucket, key));
+      await assertLease();
     });
   }
 
@@ -51,10 +53,11 @@ export class LocksService {
       await assertLease();
       const result = await this.lockModel.deleteOne({ bucket, key, lockId, expiresAt: { $gt: new Date() } });
       if (result.deletedCount === 0) throw this.lockConflict('Lock does not match', await this.getLock(bucket, key));
+      await assertLease();
     });
   }
 
-  async replaceLock(bucket: string, key: string, oldLockId: string, newLockId: string): Promise<void> {
+  async replaceLock(bucket: string, key: string, oldLockId: string, newLockId: string, lockTtlMs = this.lockTtlMs): Promise<void> {
     this.assertLockId(oldLockId);
     this.assertLockId(newLockId);
     await this.withDocumentOperation(bucket, key, async (assertLease) => {
@@ -62,9 +65,10 @@ export class LocksService {
       const now = new Date();
       const result = await this.lockModel.updateOne(
         { bucket, key, lockId: oldLockId, expiresAt: { $gt: now } },
-        { $set: { lockId: newLockId, expiresAt: new Date(Date.now() + this.lockTtlMs) } },
+        { $set: { lockId: newLockId, expiresAt: new Date(Date.now() + lockTtlMs) } },
       );
       if (result.matchedCount === 0) throw this.lockConflict('Old lock does not match', await this.getLock(bucket, key));
+      await assertLease();
     });
   }
 
@@ -75,15 +79,12 @@ export class LocksService {
     const current = await this.lockModel.findOne({ bucket, key, expiresAt: { $gt: now } }).lean();
     if (current) {
       if (lockId !== current.lockId) throw this.lockConflict('Lock does not match', current.lockId);
-      const refreshed = await this.lockModel.updateOne(
-        { bucket, key, lockId: current.lockId, expiresAt: { $gt: new Date() } },
-        { $set: { expiresAt: new Date(Date.now() + this.lockTtlMs) } },
-      );
-      if (refreshed.matchedCount !== 1) throw this.lockConflict('Lock does not match', await this.getLock(bucket, key));
       return;
     }
 
-    if (currentSize !== 0) throw this.lockConflict('File is not locked', null);
+    if (currentSize !== 0 || lockId !== undefined) {
+      throw this.lockConflict('File is not locked', null);
+    }
   }
 
   async getLock(bucket: string, key: string): Promise<string | null> {

@@ -6,7 +6,7 @@ import { WopiOperationLease } from './schemas/operation-lease.schema';
 import { WOPI_OPERATION_LEASE_TTL_MS } from './consts';
 
 type AssertLease = () => Promise<void>;
-type DocumentOperation<T> = (assertLease: AssertLease) => Promise<T>;
+type DocumentOperation<T> = (assertLease: AssertLease, signal: AbortSignal) => Promise<T>;
 
 @Injectable()
 export class OperationLeaseService {
@@ -23,6 +23,7 @@ export class OperationLeaseService {
 
     let heartbeatRunning = false;
     let heartbeatError: unknown;
+    const abortController = new AbortController();
     const heartbeat = setInterval(async () => {
       if (heartbeatRunning || heartbeatError) return;
       heartbeatRunning = true;
@@ -31,9 +32,13 @@ export class OperationLeaseService {
           { bucket, key, ownerToken, expiresAt: { $gt: new Date() } },
           { $set: { expiresAt: this.expiration() } },
         );
-        if (result.matchedCount !== 1) heartbeatError = new Error('Document operation lease was lost');
+        if (result.matchedCount !== 1) {
+          heartbeatError = new Error('Document operation lease was lost');
+          abortController.abort(heartbeatError);
+        }
       } catch (error) {
         heartbeatError = error;
+        abortController.abort(error);
       } finally {
         heartbeatRunning = false;
       }
@@ -41,22 +46,32 @@ export class OperationLeaseService {
     heartbeat.unref();
 
     const assertLease: AssertLease = async () => {
-      if (heartbeatError) {
+      if (heartbeatError || abortController.signal.aborted) {
         throw new ServiceUnavailableException('Document operation lease could not be renewed');
       }
 
-      const result = await this.leaseModel.updateOne(
-        { bucket, key, ownerToken, expiresAt: { $gt: new Date() } },
-        { $set: { expiresAt: this.expiration() } },
-      );
-      if (result.matchedCount !== 1) {
-        throw new ServiceUnavailableException('Document is busy; retry the WOPI request');
+      try {
+        const result = await this.leaseModel.updateOne(
+          { bucket, key, ownerToken, expiresAt: { $gt: new Date() } },
+          { $set: { expiresAt: this.expiration() } },
+        );
+        if (result.matchedCount !== 1) {
+          const error = new Error('Document operation lease was lost');
+          heartbeatError = error;
+          abortController.abort(error);
+          throw new ServiceUnavailableException('Document is busy; retry the WOPI request');
+        }
+      } catch (error) {
+        if (error instanceof ServiceUnavailableException) throw error;
+        heartbeatError = error;
+        abortController.abort(error);
+        throw new ServiceUnavailableException('Document operation lease could not be renewed');
       }
     };
 
     try {
       await assertLease();
-      return await operation(assertLease);
+      return await operation(assertLease, abortController.signal);
     } finally {
       clearInterval(heartbeat);
       await this.leaseModel.deleteOne({ bucket, key, ownerToken }).catch(() => undefined);

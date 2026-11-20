@@ -7,7 +7,10 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "db:indexes": "node --env-file=.env scripts/create-mongo-indexes.mjs",
-    "minio:versioning": "./scripts/enable-minio-versioning.sh"
+    "minio:versioning": "./scripts/enable-minio-versioning.sh",
+    "test": "npm run build && node --test",
+    "test:watch": "npm run build && node --test --watch",
+    "minio:verify-conditional-write": "node scripts/verify-minio-conditional-write.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.800.0",
@@ -33,5 +36,8 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.5",
     "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.6"
   }
 }

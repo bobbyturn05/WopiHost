@@ -28,3 +28,4 @@ export class Token {
 }
 
 export const TokenSchema = SchemaFactory.createForClass(Token);
+TokenSchema.index({ bucket: 1, key: 1, kind: 1, userId: 1 });

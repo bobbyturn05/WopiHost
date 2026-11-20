@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wopi-host-config
+data:
+  NODE_ENV: production
+  PORT: "3100"
+  MINIO_PORT: "9000"
+  MINIO_USE_SSL: "true"
+  MINIO_REGION: us-east-1
+  MINIO_VERSIONED_BUCKETS: documents
+  LAUNCH_TOKEN_TTL_SECONDS: "120"
+  WOPI_ACCESS_TOKEN_TTL_SECONDS: "28800"
+  MAX_FILE_SIZE_BYTES: "52428800"
+  WOPI_MAX_CONCURRENT_UPLOADS: "4"
+  WOPI_LOCK_TTL_SECONDS: "1800"
+  WOPI_OPERATION_LEASE_TTL_SECONDS: "120"
+  WOPI_SERVER_VERSION: "1.0.0"
+  WOPI_MACHINE_NAME: wopi-host
+  OFFICE_DISCOVERY_URL: https://onenote.officeapps.live.com/hosting/discovery
+  OFFICE_DISCOVERY_ZONE: external-https
+  OFFICE_ALLOWED_ORIGINS: https://word-edit.officeapps.live.com,https://excel.officeapps.live.com,https://powerpoint.officeapps.live.com,https://onenote.officeapps.live.com
+  PUBLIC_WOPI_ORIGIN: https://wopi.example.com
+  MINIO_ENDPOINT: minio.example.internal

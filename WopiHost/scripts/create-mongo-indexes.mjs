@@ -17,6 +17,10 @@ try {
     { expiresAt: 1 },
     { expireAfterSeconds: 0, name: 'expiresAt_1' },
   );
+  await db.collection('wopi_tokens').createIndex(
+    { bucket: 1, key: 1, kind: 1, userId: 1 },
+    { name: 'session_revocation_1' },
+  );
   await db.collection('wopi_locks').createIndex(
     { bucket: 1, key: 1 },
     { unique: true, name: 'bucket_1_key_1' },

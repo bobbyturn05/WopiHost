@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { randomBytes } from 'crypto';
+import { Injectable, PayloadTooLargeException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { extname } from 'path';
 import { createWopiFileId } from '../common/crypto/file-id.util';
@@ -16,8 +17,12 @@ export class LaunchService {
   ) {}
 
   async createOfficeLaunch(launchToken: string) {
-    const launch = await this.tokensService.consumeLaunchToken(launchToken);
+    const launch = await this.tokensService.findLaunchToken(launchToken);
     const metadata = await this.minioService.statObject(launch.bucket, launch.key);
+    const maxFileSize = this.config.getOrThrow<number>('wopi.maxFileSizeBytes');
+    if (metadata.size > maxFileSize) {
+      throw new PayloadTooLargeException('Document exceeds the configured WOPI file-size limit');
+    }
     const fileId = createWopiFileId(
       launch.bucket,
       launch.key,
@@ -37,6 +42,13 @@ export class LaunchService {
       expiresAt: accessTokenExpiresAt,
     });
 
+    try {
+      await this.tokensService.consumeLaunchToken(launchToken);
+    } catch (error) {
+      await this.tokensService.revokeAccessToken(accessToken).catch(() => undefined);
+      throw error;
+    }
+
     const publicOrigin = this.config.getOrThrow<string>('app.publicWopiOrigin').replace(/\/+$/, '');
     const wopiSrc = `${publicOrigin}/wopi/files/${encodeURIComponent(fileId)}`;
     const formFields = {
@@ -44,6 +56,8 @@ export class LaunchService {
       access_token: accessToken,
       access_token_ttl: String(accessTokenExpiresAt.getTime()),
     };
+    const nonce = randomBytes(18).toString('base64url');
+    const actionOrigin = new URL(actionUrl).origin;
     const inputs = Object.entries(formFields)
       .map(([name, value]) =>
         `<input type="hidden" name="${this.escapeHtml(name)}" value="${this.escapeHtml(value)}">`,
@@ -51,6 +65,7 @@ export class LaunchService {
       .join('\n');
 
     return {
+      contentSecurityPolicy: `default-src 'none'; script-src 'nonce-${nonce}'; form-action ${actionOrigin}; base-uri 'none'`,
       html: `<!DOCTYPE html>
 <html>
 <head>
@@ -63,7 +78,7 @@ export class LaunchService {
     ${inputs}
     <noscript><button type="submit">Open document</button></noscript>
   </form>
-  <script>document.getElementById('office-launch').submit();</script>
+  <script nonce="${nonce}">document.getElementById('office-launch').submit();</script>
 </body>
 </html>`,
     };
